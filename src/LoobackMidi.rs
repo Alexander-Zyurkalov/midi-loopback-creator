@@ -11,7 +11,10 @@ impl MIDILoopback {
         let source = client.virtual_source(name)?;
         Ok(MIDILoopback { client, source })
     }
-    pub fn rename(mut self, name: &str) {}
+    pub fn rename(&self, name: &str) -> Result<Self, OSStatus> {
+        self.source.flush()?;
+        MIDILoopback::new(name)
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -20,7 +23,11 @@ mod tests {
     #[test]
     fn create_source() {
         let midi_loopback = MIDILoopback::new("track123");
-        assert!(midi_loopback.is_ok());
+        assert!(
+            midi_loopback.is_ok(),
+            "Failed to create MIDI loopback: {:?}",
+            midi_loopback.err()
+        );
         let midi_loopback = midi_loopback.unwrap();
         let note_on = create_note_on(0, 64, 127);
         assert!(midi_loopback.source.received(&note_on).is_ok());
