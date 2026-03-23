@@ -1,7 +1,14 @@
+[workspace]
+members = ["xtask"]
+
 [package]
 name = "midi-loopback-creator"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
 coremidi = "0.9.0"
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["vst3", "assert_process_allocs"] }
