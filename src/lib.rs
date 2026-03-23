@@ -30,9 +30,14 @@ impl Plugin for LoopbackMidiPlugin {
     const VENDOR: &'static str = "Alexandr Zyurkalov";
     const URL: &'static str = "";
     const EMAIL: &'static str = "";
-    const VERSION: &'static str = "0.0.1";
-    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[];
-    const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
+    const VERSION: &'static str = "0.0.2";
+    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[
+        AudioIOLayout {
+            main_input_channels: None,
+            main_output_channels: NonZeroU32::new(2),
+            ..AudioIOLayout::const_default()
+        },
+    ];    const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -65,6 +70,9 @@ impl Plugin for LoopbackMidiPlugin {
 }
 impl Vst3Plugin for LoopbackMidiPlugin {
     const VST3_CLASS_ID: [u8; 16] = *b"AZLoopbackMIDI\x01\x01";
-    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[Vst3SubCategory::Tools];
+    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
+        Vst3SubCategory::Tools,
+        Vst3SubCategory::Instrument,
+    ];
 }
 nih_export_vst3!(LoopbackMidiPlugin);
