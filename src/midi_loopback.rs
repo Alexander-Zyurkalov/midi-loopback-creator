@@ -1,4 +1,4 @@
-use coremidi::{Client, OSStatus, PacketBuffer, VirtualSource};
+use coremidi::{Client, OSStatus, VirtualSource};
 
 pub struct MIDILoopback {
     client: Client,
@@ -18,7 +18,9 @@ impl MIDILoopback {
 }
 #[cfg(test)]
 mod tests {
+    use coremidi::PacketBuffer;
     use super::*;
+
 
     #[test]
     fn create_source() {
