@@ -3,17 +3,22 @@ use coremidi::{Client, OSStatus, VirtualSource};
 pub struct MIDILoopback {
     client: Client,
     source: VirtualSource,
+    name: String
 }
 
 impl MIDILoopback {
     pub fn new(name: &str) -> Result<Self, OSStatus> {
         let client = Client::new(name)?;
         let source = client.virtual_source(name)?;
-        Ok(MIDILoopback { client, source })
+        let name = name.to_string();
+        Ok(MIDILoopback { client, source, name })
     }
     pub fn rename(&self, name: &str) -> Result<Self, OSStatus> {
         self.source.flush()?;
         MIDILoopback::new(name)
+    }
+    pub fn get_name(&self) -> &str {
+       self.name.as_str()
     }
 }
 #[cfg(test)]
