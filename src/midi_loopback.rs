@@ -8,7 +8,7 @@ pub struct MIDILoopback {
 }
 
 impl MIDILoopback {
-    pub fn new(name: &str) -> Result<Self, OSStatus> {
+    pub fn new(name: &str) -> Result<(Self, u32), OSStatus> {
         let client = Client::new(name)?;
 
         let unique_id = match Self::make_unique_id() {
@@ -17,12 +17,15 @@ impl MIDILoopback {
         };
         let source = Some(Self::make_source(&client, name, unique_id)?);
         let name = name.to_string();
-        Ok(MIDILoopback {
-            client,
-            source,
-            name,
+        Ok((
+            MIDILoopback {
+                client,
+                source,
+                name,
+                unique_id,
+            },
             unique_id,
-        })
+        ))
     }
 
     pub fn rename(&mut self, name: &str) -> Result<(), OSStatus> {
@@ -75,15 +78,12 @@ mod tests {
         );
         let mut midi_loopback = midi_loopback.unwrap();
 
-        let unique_id = midi_loopback.unique_id;
-        assert!(midi_loopback.rename("new_name").is_ok());
-        assert_eq!(midi_loopback.unique_id, unique_id);
+        let unique_id = midi_loopback.1;
+        assert_eq!(midi_loopback.0.unique_id, unique_id);
+        assert!(midi_loopback.0.rename("new_name").is_ok());
+        assert_eq!(midi_loopback.0.unique_id, unique_id);
     }
 
-    fn create_note_on(channel: u8, note: u8, velocity: u8) -> PacketBuffer {
-        let data = &[0x90 | (channel & 0x0f), note & 0x7f, velocity & 0x7f];
-        PacketBuffer::new(0, data)
-    }
 
     #[test]
     fn make_unique_id_test() {
