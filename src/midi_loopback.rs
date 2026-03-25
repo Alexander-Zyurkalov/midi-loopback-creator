@@ -1,9 +1,11 @@
 use anyhow::{anyhow, Result};
-use coremidi::{Client, OSStatus, Properties, VirtualSource};
+use coremidi::{Client, OSStatus, Properties, VirtualDestination, VirtualSource};
+use std::sync::{Arc, RwLock};
 
 pub struct MIDILoopback {
     client: Client,
-    source: Option<VirtualSource>,
+    source: Arc<RwLock<Option<VirtualSource>>>,
+    destination: Option<VirtualDestination>,
     name: String,
     unique_id: u32,
 }
@@ -45,12 +47,26 @@ impl MIDILoopback {
             )
         })?;
 
-        let source = Some(Self::make_source(&client, name, unique_id)?);
+        let source = Arc::new(RwLock::new(Some(Self::make_source(
+            &client, name, unique_id,
+        )?)));
+        let source_for_relay = Arc::clone(&source);
+        let destination = client
+            .virtual_destination(name, move |packet_list| {
+                if let Ok(guard) = source_for_relay.read() {
+                    if let Some(ref src) = *guard {
+                        let _ = src.received(packet_list);
+                    }
+                }
+            })
+            .map_err(midi_err)?;
+        let destination = Some(destination);
         let name = name.to_string();
         Ok((
             MIDILoopback {
                 client,
                 source,
+                destination,
                 name,
                 unique_id,
             },
@@ -59,8 +75,21 @@ impl MIDILoopback {
     }
 
     pub fn rename(&mut self, name: &str) -> Result<()> {
-        self.source = None;
-        self.source = Some(Self::make_source(&self.client, name, self.unique_id)?);
+        {
+            let mut guard = self
+                .source
+                .write()
+                .map_err(|_| anyhow!("Source lock is poisoned"))?;
+            *guard = None;
+        }
+        let new_source = Self::make_source(&self.client, name, self.unique_id)?;
+        {
+            let mut guard = self
+                .source
+                .write()
+                .map_err(|_| anyhow!("Source lock is poisoned"))?;
+            *guard = Some(new_source);
+        }
         self.name = name.to_string();
         Ok(())
     }
