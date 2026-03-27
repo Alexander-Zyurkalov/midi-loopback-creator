@@ -51,6 +51,9 @@ impl MIDILoopback {
             &client, name, unique_id,
         )?)));
         let source_for_relay = Arc::clone(&source);
+        // TODO: move source to the lambda completely
+        //  https://claude.ai/chat/debac70c-e5d5-4c24-b16c-1cd958f06df8
+
         let destination = client
             .virtual_destination(name, move |packet_list| {
                 if let Ok(guard) = source_for_relay.read() {
@@ -82,6 +85,9 @@ impl MIDILoopback {
                 .map_err(|_| anyhow!("Source lock is poisoned"))?;
             *guard = None;
         }
+        // TODO also rename destination
+        // TODO also apply a unique ID for it
+        // https://claude.ai/chat/debac70c-e5d5-4c24-b16c-1cd958f06df8
         let new_source = Self::make_source(&self.client, name, self.unique_id)?;
         {
             let mut guard = self
