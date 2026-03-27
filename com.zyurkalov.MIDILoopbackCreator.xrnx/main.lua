@@ -134,3 +134,4 @@ local function setup_observers()
 end
 
 renoise.tool().app_new_document_observable:add_notifier(setup_observers)
+-- TODO: also assign MIDI
