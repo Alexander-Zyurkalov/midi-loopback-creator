@@ -58,14 +58,16 @@ unsafe fn lua_pop(L: *mut lua_State, n: c_int) {
 }
 
 #[allow(non_snake_case)]
-unsafe fn make_lua_error(L: *mut lua_State, err: Error) -> c_int {
+unsafe fn make_lua_error(L: *mut lua_State, err: Error, nil_count: c_int) -> c_int {
     unsafe {
-        lua_pushnil(L);
+        for _ in 0..nil_count {
+            lua_pushnil(L);
+        }
         let err_cstring = std::ffi::CString::new(err.to_string()).unwrap_or_else(|_| {
             std::ffi::CString::new("Can't even make an error message".to_string()).unwrap()
         });
         lua_pushstring(L, err_cstring.as_ptr());
-        2
+        nil_count + 1
     }
 }
 
@@ -121,14 +123,14 @@ unsafe fn push_rust_string(L: *mut lua_State, s: &str) {
 
 // ── Exported methods ────────────────────────────────────────────────
 
-// ---------- new(name, instrument_id) -> userdata, unique_id | nil, err ----------
+// ---------- new(name, instrument_id) -> userdata, unique_id, nil | nil, nil, err ----------
 
 #[allow(non_snake_case)]
 unsafe extern "C" fn new(L: *mut lua_State) -> c_int {
     unsafe {
         match new_inner(L) {
-            Ok(_) => 2, // userdata + unique_id
-            Err(err) => make_lua_error(L, err),
+            Ok(_) => 3, // userdata + unique_id + nil
+            Err(err) => make_lua_error(L, err, 2),
         }
     }
 }
@@ -149,6 +151,7 @@ unsafe fn new_inner(L: *mut lua_State) -> Result<()> {
         lua_getfield(L, LUA_REGISTRYINDEX, MIDI_LOOPBACK_MT_NAME);
         lua_setmetatable(L, -2);
         lua_pushinteger(L, unique_id as i64);
+        lua_pushnil(L);
         Ok(())
     }
 }
@@ -160,7 +163,7 @@ unsafe extern "C" fn rename(L: *mut lua_State) -> c_int {
     unsafe {
         match rename_inner(L) {
             Ok(()) => 0,
-            Err(err) => make_lua_error(L, err),
+            Err(err) => make_lua_error(L, err, 1),
         }
     }
 }
@@ -182,7 +185,7 @@ unsafe extern "C" fn get_name(L: *mut lua_State) -> c_int {
     unsafe {
         match get_name_inner(L) {
             Ok(_) => 1,
-            Err(err) => make_lua_error(L, err),
+            Err(err) => make_lua_error(L, err, 1),
         }
     }
 }
@@ -203,7 +206,7 @@ unsafe extern "C" fn get_unique_id(L: *mut lua_State) -> c_int {
     unsafe {
         match get_unique_id_inner(L) {
             Ok(_) => 1,
-            Err(err) => make_lua_error(L, err),
+            Err(err) => make_lua_error(L, err, 1),
         }
     }
 }

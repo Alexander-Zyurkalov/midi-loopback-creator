@@ -1,8 +1,8 @@
 local midi_loopback = require("midi_loopback")
 
-local loopback, unique_id = midi_loopback.new("MyLoopback")
+local loopback, unique_id, err = midi_loopback.new("MyLoopback", 1)
 if not loopback then
-    error("Failed to create loopback: " .. unique_id) -- unique_id is err string on failure
+    error("Failed to create loopback: " .. err)
 end
 
 print("Created loopback, unique_id: " .. unique_id)

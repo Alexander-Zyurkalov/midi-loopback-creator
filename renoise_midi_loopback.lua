@@ -22,14 +22,14 @@ local function on_name_changed(i)
                 renoise.app():show_error(("MIDILoopback rename failed: %s"):format(err))
             end
         else
-            local obj, unique_id_or_err = midi_loopback.new(new_name, i)
+            local obj, unique_id, err = midi_loopback.new(new_name, i)
             if obj then
                 loopbacks[i] = obj
                 print(("MIDILoopback created for instrument %d '%s' (unique_id=%d)"):format(
-                    i, new_name, unique_id_or_err))
+                    i, new_name, unique_id))
             else
                 renoise.app():show_error(
-                    ("Failed to create MIDILoopback for '%s': %s"):format(new_name, unique_id_or_err))
+                    ("Failed to create MIDILoopback for '%s': %s"):format(new_name, err))
             end
         end
     end
