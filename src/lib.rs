@@ -28,6 +28,7 @@ pub struct luaL_Reg {
 #[allow(non_snake_case)]
 unsafe extern "C" {
     fn lua_pushinteger(L: *mut lua_State, n: i64);
+    fn lua_tointeger(L: *mut lua_State, index: c_int) -> i64;
     fn lua_pushnil(L: *mut lua_State);
     fn lua_pushvalue(L: *mut lua_State, index: c_int);
     fn lua_tolstring(L: *mut lua_State, index: c_int, len: *mut usize) -> *const c_char;
@@ -69,6 +70,21 @@ unsafe fn make_lua_error(L: *mut lua_State, err: Error) -> c_int {
 }
 
 #[allow(non_snake_case)]
+unsafe fn get_u8_or_error(L: *mut lua_State, argument_num: i32) -> Result<u8> {
+    unsafe {
+        let n = lua_tointeger(L, argument_num);
+        if n < 1 || n > 255 {
+            return Err(anyhow!(
+                "Argument {} must be an integer between 1 and 255, got {}",
+                argument_num,
+                n
+            ));
+        }
+        Ok(n as u8)
+    }
+}
+
+#[allow(non_snake_case)]
 unsafe fn get_string_or_error(L: *mut lua_State, argument_num: i32) -> Result<String> {
     unsafe {
         let c_str: *const c_char = lua_tolstring(L, argument_num, null_mut());
@@ -105,7 +121,7 @@ unsafe fn push_rust_string(L: *mut lua_State, s: &str) {
 
 // ── Exported methods ────────────────────────────────────────────────
 
-// ---------- new(name) -> userdata, unique_id | nil, err ----------
+// ---------- new(name, instrument_id) -> userdata, unique_id | nil, err ----------
 
 #[allow(non_snake_case)]
 unsafe extern "C" fn new(L: *mut lua_State) -> c_int {
@@ -121,8 +137,9 @@ unsafe extern "C" fn new(L: *mut lua_State) -> c_int {
 unsafe fn new_inner(L: *mut lua_State) -> Result<()> {
     unsafe {
         let name = get_string_or_error(L, 1)?;
+        let instrument_id = get_u8_or_error(L, 2)?;
 
-        let (loopback, unique_id) = MIDILoopback::new(&name)?; // just ? now
+        let (loopback, unique_id) = MIDILoopback::new(&name, instrument_id)?;
 
         let boxed = Box::new(loopback);
         std::ptr::write(
