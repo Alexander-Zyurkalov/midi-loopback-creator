@@ -59,7 +59,7 @@ impl MIDILoopback {
                 destination,
                 name,
                 unique_id,
-                instrument_id
+                instrument_id,
             },
             unique_id,
         ))
@@ -99,9 +99,8 @@ impl MIDILoopback {
             .set_property(&Properties::unique_id(), source_id as i32)
             .map_err(midi_err)?;
 
-        let destination_name = format!("RenoiseInstrument{}", instrument_id);
         let destination = client
-            .virtual_destination(destination_name.as_str(), move |packet_list| {
+            .virtual_destination(name, move |packet_list| {
                 let _ = source.received(packet_list);
             })
             .map_err(midi_err)?;
@@ -119,6 +118,12 @@ impl MIDILoopback {
             let random_num = rand::random::<u32>();
             for source in coremidi::Sources {
                 match source.unique_id() {
+                    Some(id) if random_num == id => continue 'main_loop,
+                    _ => {}
+                }
+            }
+            for destination in coremidi::Destinations {
+                match destination.unique_id() {
                     Some(id) if random_num == id => continue 'main_loop,
                     _ => {}
                 }
