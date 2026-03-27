@@ -1,10 +1,8 @@
 use anyhow::{anyhow, Result};
-use coremidi::{Client, OSStatus, Properties, VirtualDestination, VirtualSource};
-use std::sync::{Arc, RwLock};
+use coremidi::{Client, OSStatus, Properties, VirtualDestination};
 
 pub struct MIDILoopback {
     client: Client,
-    source: Arc<RwLock<Option<VirtualSource>>>,
     destination: Option<VirtualDestination>,
     name: String,
     unique_id: u32,
@@ -47,28 +45,11 @@ impl MIDILoopback {
             )
         })?;
 
-        let source = Arc::new(RwLock::new(Some(Self::make_source(
-            &client, name, unique_id,
-        )?)));
-        let source_for_relay = Arc::clone(&source);
-        // TODO: move source to the lambda completely
-        //  https://claude.ai/chat/debac70c-e5d5-4c24-b16c-1cd958f06df8
-
-        let destination = client
-            .virtual_destination(name, move |packet_list| {
-                if let Ok(guard) = source_for_relay.read() {
-                    if let Some(ref src) = *guard {
-                        let _ = src.received(packet_list);
-                    }
-                }
-            })
-            .map_err(midi_err)?;
-        let destination = Some(destination);
+        let destination = Some(Self::make_destination(&client, name, unique_id)?);
         let name = name.to_string();
         Ok((
             MIDILoopback {
                 client,
-                source,
                 destination,
                 name,
                 unique_id,
@@ -78,24 +59,11 @@ impl MIDILoopback {
     }
 
     pub fn rename(&mut self, name: &str) -> Result<()> {
-        {
-            let mut guard = self
-                .source
-                .write()
-                .map_err(|_| anyhow!("Source lock is poisoned"))?;
-            *guard = None;
-        }
         // TODO also rename destination
         // TODO also apply a unique ID for it
         // https://claude.ai/chat/debac70c-e5d5-4c24-b16c-1cd958f06df8
-        let new_source = Self::make_source(&self.client, name, self.unique_id)?;
-        {
-            let mut guard = self
-                .source
-                .write()
-                .map_err(|_| anyhow!("Source lock is poisoned"))?;
-            *guard = Some(new_source);
-        }
+        self.destination = None;
+        self.destination = Some(Self::make_destination(&self.client, name, self.unique_id)?);
         self.name = name.to_string();
         Ok(())
     }
@@ -108,12 +76,17 @@ impl MIDILoopback {
         self.unique_id
     }
 
-    fn make_source(client: &Client, name: &str, unique_id: u32) -> Result<VirtualSource> {
+    fn make_destination(client: &Client, name: &str, unique_id: u32) -> Result<VirtualDestination> {
         let source = client.virtual_source(name).map_err(midi_err)?;
         source
             .set_property(&Properties::unique_id(), unique_id as i32)
             .map_err(midi_err)?;
-        Ok(source)
+        let destination = client
+            .virtual_destination(name, move |packet_list| {
+                let _ = source.received(packet_list);
+            })
+            .map_err(midi_err)?;
+        Ok(destination)
     }
 
     fn make_unique_id() -> Option<u32> {
@@ -136,7 +109,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn create_source() {
+    fn create_destination() {
         let midi_loopback = MIDILoopback::new("track123");
         assert!(
             midi_loopback.is_ok(),
