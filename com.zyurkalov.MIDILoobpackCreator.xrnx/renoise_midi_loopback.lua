@@ -1,8 +1,7 @@
-local midi_loopback = require("midi_loopback")
+local midi_loopback = require("libmidi_loopback_creator")
 
-local loopbacks      = {}  -- [instrument_index] -> MIDILoopback
-local prev_names     = {}  -- [instrument_index] -> string
-local name_notifiers = {}  -- [instrument_index] -> closure
+local loopbacks  = {}  -- [instrument_index] -> MIDILoopback
+local prev_names = {}  -- [instrument_index] -> string
 
 local function matches_pattern(name)
     return name:match("%-midiext$") ~= nil
@@ -40,33 +39,31 @@ end
 local function attach_observer(i)
     local instrument = renoise.song().instruments[i]
     prev_names[i] = instrument.name
-    local notifier = function() on_name_changed(i) end
-    name_notifiers[i] = notifier
-    instrument.name_observable:add_notifier(notifier)
+    instrument.name_observable:add_notifier(function() on_name_changed(i) end)
 end
 
-local function detach_all_observers()
-    local song = renoise.song()
-    for i, notifier in pairs(name_notifiers) do
-        if i <= #song.instruments then
-            local instrument = song.instruments[i]
-            if instrument.name_observable:has_notifier(notifier) then
-                instrument.name_observable:remove_notifier(notifier)
-            end
-        end
+local function on_instruments_changed(change)
+    if change.type == "insert" then
+        attach_observer(change.index)
+    elseif change.type == "remove" then
+        prev_names[change.index] = nil
+        loopbacks[change.index]  = nil
+    elseif change.type == "swap" then
+        prev_names[change.index1], prev_names[change.index2] =
+            prev_names[change.index2], prev_names[change.index1]
+        loopbacks[change.index1], loopbacks[change.index2] =
+            loopbacks[change.index2], loopbacks[change.index1]
     end
-    name_notifiers = {}
-    prev_names     = {}
-    loopbacks      = {}
 end
 
 local function setup_observers()
-    detach_all_observers()
+    prev_names = {}
+    loopbacks  = {}
     local song = renoise.song()
     for i = 1, #song.instruments do
         attach_observer(i)
     end
+    song.instruments_observable:add_notifier(on_instruments_changed)
 end
 
-renoise.song().instruments_observable:add_notifier(setup_observers)
 renoise.tool().app_new_document_observable:add_notifier(setup_observers)
