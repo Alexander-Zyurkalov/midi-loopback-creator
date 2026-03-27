@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RenoiseScriptingTool doc_version="0">
+    <Id>com.zyurkalov.MIDILoopbackCreator</Id>
+    <Name>MIDILoopBackCreator</Name>
+    <Version>1.0.1</Version>
+    <Author>Zyurkalov</Author>
+    <Description>Automatically creates virtual CoreMIDI loopback ports for instruments whose names end with "-midiext".
+        Each matching instrument gets a dedicated MIDI source and destination pair, allowing Renoise to send MIDI from
+        those instruments to external software by name. Renaming a matched instrument updates the loopback port name
+        accordingly.
+    </Description>
+    <ApiVersion>6.2</ApiVersion>
+    <Category>MIDI</Category>
+    <Homepage>http://scripting.renoise.com</Homepage>
+    <Icon>icon.png</Icon>
+    <Platform>Mac</Platform>
+</RenoiseScriptingTool>

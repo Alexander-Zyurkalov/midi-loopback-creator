@@ -1,4 +1,4 @@
-local midi_loopback = require("libmidi_loopback_creator")
+local midi_loopback = require("midi_loopback_creator")
 
 local loopbacks  = {}  -- [instrument_index] -> MIDILoopback
 local prev_names = {}  -- [instrument_index] -> string

@@ -1,4 +1,4 @@
-local midi_loopback = require("libmidi_loopback_creator")
+local midi_loopback = require("midi_loopback_creator")
 
 local loopback, unique_id, err = midi_loopback.new("MyLoopback", 1)
 if not loopback then

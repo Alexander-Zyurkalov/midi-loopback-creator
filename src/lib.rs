@@ -273,7 +273,7 @@ const MIDI_LOOPBACK_CLASS_META: [luaL_Reg; 2] = [
 
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]
-pub unsafe extern "C" fn luaopen_libmidi_loopback_creator(L: *mut lua_State) -> c_int {
+pub unsafe extern "C" fn luaopen_midi_loopback_creator(L: *mut lua_State) -> c_int {
     unsafe {
         luaL_newmetatable(L, MIDI_LOOPBACK_MT_NAME);
         luaL_register(L, null(), MIDI_LOOPBACK_OBJECT_META.as_ptr());
