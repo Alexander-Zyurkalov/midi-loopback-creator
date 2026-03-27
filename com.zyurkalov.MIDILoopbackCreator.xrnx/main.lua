@@ -1,17 +1,58 @@
 local midi_loopback = require("midi_loopback_creator")
 
-local loopbacks = {}  -- [instrument_index] -> MIDILoopback
-local prev_names = {}  -- [instrument_index] -> string
+local loopbacks    = {}  -- [instrument_index] -> MIDILoopback
+local loopback_ids = {}  -- [instrument_index] -> {source_id, destination_id}
+local prev_names   = {}  -- [instrument_index] -> string
 
 local function matches_pattern(name)
     return name:match("%-midiext$") ~= nil
 end
 
+-- ── Comment-based ID persistence ────────────────────────────────────
+-- Format: "midiext|<instrument_name>|<source_id>|<destination_id>"
+
+local function find_saved_ids(name)
+    for _, c in ipairs(renoise.song().comments) do
+        local n, src, dst = c:match("^midiext|(.+)|(%d+)|(%d+)$")
+        if n == name then
+            return tonumber(src), tonumber(dst)
+        end
+    end
+    return nil, nil
+end
+
+local function save_ids(name, source_id, destination_id)
+    local song = renoise.song()
+    local comments = song.comments
+    local entry = ("midiext|%s|%d|%d"):format(name, source_id, destination_id)
+    for i, c in ipairs(comments) do
+        if c:match("^midiext|(.+)|%d+|%d+$") == name then
+            comments[i] = entry
+            song.comments = comments
+            return
+        end
+    end
+    comments[#comments + 1] = entry
+    song.comments = comments
+end
+
+local function delete_saved_ids(name)
+    local song = renoise.song()
+    local comments = song.comments
+    local new_comments = {}
+    for _, c in ipairs(comments) do
+        if c:match("^midiext|(.+)|%d+|%d+$") ~= name then
+            new_comments[#new_comments + 1] = c
+        end
+    end
+    song.comments = new_comments
+end
+
+-- ── Instrument name change handler ──────────────────────────────────
+
 local function on_name_changed(i)
     local song = renoise.song()
-    if i > #song.instruments then
-        return
-    end
+    if i > #song.instruments then return end
 
     local new_name = song.instruments[i].name
     local old_name = prev_names[i] or ""
@@ -20,25 +61,38 @@ local function on_name_changed(i)
         if matches_pattern(old_name) and loopbacks[i] then
             local _, err = loopbacks[i]:rename(new_name)
             if err then
-                local error_msg = ("MIDILoopback rename failed: %s"):format(err)
-                renoise.app():show_error(error_msg)
-                print(error_msg)
+                local msg = ("MIDILoopback rename failed: %s"):format(err)
+                renoise.app():show_error(msg)
+                print(msg)
+            else
+                local ids = loopback_ids[i]
+                delete_saved_ids(old_name)
+                save_ids(new_name, ids[1], ids[2])
             end
         else
-            local obj, unique_id, err = midi_loopback.new(new_name, i)
+            local src_id, dst_id = find_saved_ids(new_name)
+            local obj, source_id, destination_id, err = midi_loopback.new(new_name, src_id, dst_id)
             if obj then
-                loopbacks[i] = obj
-                print(("MIDILoopback created for instrument %d '%s' (unique_id=%d)"):format(
-                        i, new_name, unique_id))
+                loopbacks[i]    = obj
+                loopback_ids[i] = {source_id, destination_id}
+                save_ids(new_name, source_id, destination_id)
+                print(("MIDILoopback created for instrument %d '%s' (source_id=%d, destination_id=%d)"):format(
+                    i, new_name, source_id, destination_id))
             else
                 renoise.app():show_error(
-                        ("Failed to create MIDILoopback for '%s': %s"):format(new_name, err))
+                    ("Failed to create MIDILoopback for '%s': %s"):format(new_name, err))
             end
         end
+    elseif matches_pattern(old_name) then
+        delete_saved_ids(old_name)
+        loopbacks[i]    = nil
+        loopback_ids[i] = nil
     end
 
     prev_names[i] = new_name
 end
+
+-- ── Observer management ─────────────────────────────────────────────
 
 local function attach_observer(i)
     local instrument = renoise.song().instruments[i]
@@ -53,17 +107,25 @@ local function on_instruments_changed(change)
     if change.type == "insert" then
         attach_observer(change.index)
     elseif change.type == "remove" then
-        prev_names[change.index] = nil
-        loopbacks[change.index] = nil
+        local name = prev_names[change.index]
+        if name and matches_pattern(name) then
+            delete_saved_ids(name)
+        end
+        prev_names[change.index]    = nil
+        loopbacks[change.index]     = nil
+        loopback_ids[change.index]  = nil
     elseif change.type == "swap" then
-        prev_names[change.index1], prev_names[change.index2] = prev_names[change.index2], prev_names[change.index1]
-        loopbacks[change.index1], loopbacks[change.index2] = loopbacks[change.index2], loopbacks[change.index1]
+        local i1, i2 = change.index1, change.index2
+        prev_names[i1],   prev_names[i2]   = prev_names[i2],   prev_names[i1]
+        loopbacks[i1],    loopbacks[i2]    = loopbacks[i2],    loopbacks[i1]
+        loopback_ids[i1], loopback_ids[i2] = loopback_ids[i2], loopback_ids[i1]
     end
 end
 
 local function setup_observers()
-    prev_names = {}
-    loopbacks = {}
+    prev_names   = {}
+    loopbacks    = {}
+    loopback_ids = {}
     local song = renoise.song()
     for i = 1, #song.instruments do
         attach_observer(i)

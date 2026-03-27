@@ -5,8 +5,8 @@ pub struct MIDILoopback {
     client: Client,
     destination: Option<VirtualDestination>,
     name: String,
-    unique_id: u32,
-    instrument_id: u8,
+    source_id: u32,
+    destination_id: u32,
 }
 
 fn describe_os_status(status: OSStatus) -> String {
@@ -36,45 +36,54 @@ fn midi_err(status: OSStatus) -> anyhow::Error {
 }
 
 impl MIDILoopback {
-    pub fn new(name: &str, instrument_id: u8) -> Result<(Self, u32)> {
+    pub fn new(
+        name: &str,
+        source_id: Option<u32>,
+        destination_id: Option<u32>,
+    ) -> Result<(Self, u32, u32)> {
         let client = Client::new(name).map_err(midi_err)?;
 
-        let unique_id = Self::make_unique_id().ok_or_else(|| {
-            anyhow!(
-                "Failed to generate a unique MIDI ID after 10000 attempts — \
-                 too many MIDI sources registered in the system"
-            )
-        })?;
+        let source_id = match source_id {
+            Some(id) => id,
+            None => Self::make_unique_id().ok_or_else(|| {
+                anyhow!(
+                    "Failed to generate a unique MIDI source ID after 10000 attempts — \
+                     too many MIDI endpoints registered in the system"
+                )
+            })?,
+        };
 
-        let destination = Some(Self::make_loopback(
-            &client,
-            name,
-            unique_id,
-            instrument_id,
-        )?);
-        let name = name.to_string();
+        let destination_id = match destination_id {
+            Some(id) => id,
+            None => Self::make_unique_id().ok_or_else(|| {
+                anyhow!(
+                    "Failed to generate a unique MIDI destination ID after 10000 attempts — \
+                     too many MIDI endpoints registered in the system"
+                )
+            })?,
+        };
+
+        let destination = Some(Self::make_loopback(&client, name, source_id, destination_id)?);
         Ok((
             MIDILoopback {
                 client,
                 destination,
-                name,
-                unique_id,
-                instrument_id,
+                name: name.to_string(),
+                source_id,
+                destination_id,
             },
-            unique_id,
+            source_id,
+            destination_id,
         ))
     }
 
     pub fn rename(&mut self, name: &str) -> Result<()> {
-        // TODO also rename destination
-        // TODO also apply a unique ID for it
-        // https://claude.ai/chat/debac70c-e5d5-4c24-b16c-1cd958f06df8
         self.destination = None;
         self.destination = Some(Self::make_loopback(
             &self.client,
             name,
-            self.unique_id,
-            self.instrument_id,
+            self.source_id,
+            self.destination_id,
         )?);
         self.name = name.to_string();
         Ok(())
@@ -85,31 +94,27 @@ impl MIDILoopback {
     }
 
     pub fn get_unique_id(&self) -> u32 {
-        self.unique_id
+        self.source_id
     }
 
     fn make_loopback(
         client: &Client,
         name: &str,
         source_id: u32,
-        instrument_id: u8,
+        destination_id: u32,
     ) -> Result<VirtualDestination> {
         let source = client.virtual_source(name).map_err(midi_err)?;
         source
             .set_property(&Properties::unique_id(), source_id as i32)
             .map_err(midi_err)?;
-
         let destination = client
             .virtual_destination(name, move |packet_list| {
                 let _ = source.received(packet_list);
             })
             .map_err(midi_err)?;
-        let magic_number_for_a_destination_id = 58828300;
-        let destination_id = magic_number_for_a_destination_id + instrument_id as i32;
         destination
-            .set_property(&Properties::unique_id(), destination_id)
+            .set_property(&Properties::unique_id(), destination_id as i32)
             .map_err(midi_err)?;
-
         Ok(destination)
     }
 
@@ -140,17 +145,17 @@ mod tests {
 
     #[test]
     fn create_destination() {
-        let midi_loopback = MIDILoopback::new("Instrument1", 1);
+        let midi_loopback = MIDILoopback::new("Instrument1", None, None);
         assert!(
             midi_loopback.is_ok(),
             "Failed to create MIDI loopback: {:?}",
             midi_loopback.err()
         );
-        let (mut loopback, unique_id) = midi_loopback.unwrap();
+        let (mut loopback, source_id, _destination_id) = midi_loopback.unwrap();
 
-        assert_eq!(loopback.unique_id, unique_id);
+        assert_eq!(loopback.source_id, source_id);
         assert!(loopback.rename("new_name").is_ok());
-        assert_eq!(loopback.unique_id, unique_id);
+        assert_eq!(loopback.source_id, source_id);
     }
 
     #[test]

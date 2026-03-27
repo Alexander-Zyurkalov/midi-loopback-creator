@@ -29,6 +29,7 @@ pub struct luaL_Reg {
 unsafe extern "C" {
     fn lua_pushinteger(L: *mut lua_State, n: i64);
     fn lua_tointeger(L: *mut lua_State, index: c_int) -> i64;
+    fn lua_type(L: *mut lua_State, index: c_int) -> c_int;
     fn lua_pushnil(L: *mut lua_State);
     fn lua_pushvalue(L: *mut lua_State, index: c_int);
     fn lua_tolstring(L: *mut lua_State, index: c_int, len: *mut usize) -> *const c_char;
@@ -44,6 +45,8 @@ unsafe extern "C" {
 }
 
 const LUA_REGISTRYINDEX: c_int = -10000;
+const LUA_TNONE: c_int = -1;
+const LUA_TNIL: c_int = 0;
 
 const MIDI_LOOPBACK_MT_NAME: *const c_char = b"RustMIDILoopback\0".as_ptr() as *const c_char;
 
@@ -72,17 +75,22 @@ unsafe fn make_lua_error(L: *mut lua_State, err: Error, nil_count: c_int) -> c_i
 }
 
 #[allow(non_snake_case)]
-unsafe fn get_u8_or_error(L: *mut lua_State, argument_num: i32) -> Result<u8> {
+unsafe fn get_optional_u32(L: *mut lua_State, argument_num: i32) -> Result<Option<u32>> {
     unsafe {
+        let t = lua_type(L, argument_num);
+        if t == LUA_TNONE || t == LUA_TNIL {
+            return Ok(None);
+        }
         let n = lua_tointeger(L, argument_num);
-        if n < 1 || n > 255 {
+        if n < 0 || n > u32::MAX as i64 {
             return Err(anyhow!(
-                "Argument {} must be an integer between 1 and 255, got {}",
+                "Argument {} must be a valid MIDI unique ID (0 to {}), got {}",
                 argument_num,
+                u32::MAX,
                 n
             ));
         }
-        Ok(n as u8)
+        Ok(Some(n as u32))
     }
 }
 
@@ -123,14 +131,14 @@ unsafe fn push_rust_string(L: *mut lua_State, s: &str) {
 
 // ── Exported methods ────────────────────────────────────────────────
 
-// ---------- new(name, instrument_id) -> userdata, unique_id, nil | nil, nil, err ----------
+// ---------- new(name[, source_id[, destination_id]]) -> userdata, source_id, destination_id, nil | nil, nil, nil, err ----------
 
 #[allow(non_snake_case)]
 unsafe extern "C" fn new(L: *mut lua_State) -> c_int {
     unsafe {
         match new_inner(L) {
-            Ok(_) => 3, // userdata + unique_id + nil
-            Err(err) => make_lua_error(L, err, 2),
+            Ok(_) => 4, // userdata + source_id + destination_id + nil
+            Err(err) => make_lua_error(L, err, 3),
         }
     }
 }
@@ -139,9 +147,10 @@ unsafe extern "C" fn new(L: *mut lua_State) -> c_int {
 unsafe fn new_inner(L: *mut lua_State) -> Result<()> {
     unsafe {
         let name = get_string_or_error(L, 1)?;
-        let instrument_id = get_u8_or_error(L, 2)?;
+        let source_id = get_optional_u32(L, 2)?;
+        let destination_id = get_optional_u32(L, 3)?;
 
-        let (loopback, unique_id) = MIDILoopback::new(&name, instrument_id)?;
+        let (loopback, src_id, dst_id) = MIDILoopback::new(&name, source_id, destination_id)?;
 
         let boxed = Box::new(loopback);
         std::ptr::write(
@@ -150,7 +159,8 @@ unsafe fn new_inner(L: *mut lua_State) -> Result<()> {
         );
         lua_getfield(L, LUA_REGISTRYINDEX, MIDI_LOOPBACK_MT_NAME);
         lua_setmetatable(L, -2);
-        lua_pushinteger(L, unique_id as i64);
+        lua_pushinteger(L, src_id as i64);
+        lua_pushinteger(L, dst_id as i64);
         lua_pushnil(L);
         Ok(())
     }
