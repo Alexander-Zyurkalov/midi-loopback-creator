@@ -48,6 +48,15 @@ local function delete_saved_ids(name)
     song.comments = new_comments
 end
 
+-- ── MIDI output assignment ───────────────────────────────────────────
+
+local function assign_midi_output(i, name)
+    local instrument = renoise.song().instruments[i]
+    local props = instrument.midi_output_properties
+    props.instrument_type = renoise.InstrumentMidiOutputProperties.TYPE_EXTERNAL
+    props.device_name = name
+end
+
 -- ── Instrument name change handler ──────────────────────────────────
 
 local function on_name_changed(i)
@@ -88,6 +97,13 @@ local function on_name_changed(i)
         loopbacks[i]    = nil
         loopback_ids[i] = nil
     end
+
+    local timer_func
+    timer_func = function()
+        assign_midi_output(i, new_name)
+        renoise.tool():remove_timer(timer_func)
+    end
+    renoise.tool():add_timer(timer_func, 3000)
 
     prev_names[i] = new_name
 end
@@ -134,4 +150,3 @@ local function setup_observers()
 end
 
 renoise.tool().app_new_document_observable:add_notifier(setup_observers)
--- TODO: also assign MIDI
