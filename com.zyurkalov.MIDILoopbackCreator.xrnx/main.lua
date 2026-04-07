@@ -96,6 +96,7 @@ local function on_name_changed(i)
         delete_saved_ids(old_name)
         loopbacks[i]    = nil
         loopback_ids[i] = nil
+        collectgarbage("collect")
     end
 
     local timer_func
@@ -130,6 +131,7 @@ local function on_instruments_changed(change)
         prev_names[change.index]    = nil
         loopbacks[change.index]     = nil
         loopback_ids[change.index]  = nil
+        collectgarbage("collect")
     elseif change.type == "swap" then
         local i1, i2 = change.index1, change.index2
         prev_names[i1],   prev_names[i2]   = prev_names[i2],   prev_names[i1]
@@ -142,6 +144,7 @@ local function setup_observers()
     prev_names   = {}
     loopbacks    = {}
     loopback_ids = {}
+    collectgarbage("collect")
     local song = renoise.song()
     for i = 1, #song.instruments do
         attach_observer(i)
