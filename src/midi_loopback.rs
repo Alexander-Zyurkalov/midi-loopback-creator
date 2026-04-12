@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use coremidi::{Client, OSStatus, Properties, VirtualDestination};
+use coremidi::{Client, OSStatus, Properties, Protocol, VirtualDestination};
 
 pub struct MIDILoopback {
     client: Client,
@@ -108,7 +108,7 @@ impl MIDILoopback {
             .set_property(&Properties::unique_id(), source_id as i32)
             .map_err(midi_err)?;
         let destination = client
-            .virtual_destination(name, move |packet_list| {
+            .virtual_destination_with_protocol(name,Protocol::Midi10 ,move |packet_list| {
                 let _ = source.received(packet_list);
             })
             .map_err(midi_err)?;
