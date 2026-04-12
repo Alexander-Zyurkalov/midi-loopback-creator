@@ -209,6 +209,61 @@ unsafe fn get_name_inner(L: *mut lua_State) -> Result<()> {
     }
 }
 
+// ---------- obj:set_additional_destination([dest_id]) -> nil, err | nothing ----------
+
+#[allow(non_snake_case)]
+unsafe extern "C" fn set_additional_destination(L: *mut lua_State) -> c_int {
+    unsafe {
+        match set_additional_destination_inner(L) {
+            Ok(()) => 0,
+            Err(err) => make_lua_error(L, err, 1),
+        }
+    }
+}
+
+#[allow(non_snake_case)]
+unsafe fn set_additional_destination_inner(L: *mut lua_State) -> Result<()> {
+    unsafe {
+        let loopback = get_loopback(L)?;
+        let id = get_optional_u32(L, 2)?;
+        loopback.set_additional_destination(id)?;
+        Ok(())
+    }
+}
+
+// ---------- find_destination_id_by_name(name) -> integer | nil ----------
+
+#[allow(non_snake_case)]
+unsafe extern "C" fn find_destination_id_by_name(L: *mut lua_State) -> c_int {
+    unsafe {
+        match find_destination_id_by_name_inner(L) {
+            Ok(found) => {
+                if found {
+                    1
+                } else {
+                    lua_pushnil(L);
+                    1
+                }
+            }
+            Err(err) => make_lua_error(L, err, 0),
+        }
+    }
+}
+
+#[allow(non_snake_case)]
+unsafe fn find_destination_id_by_name_inner(L: *mut lua_State) -> Result<bool> {
+    unsafe {
+        let name = get_string_or_error(L, 1)?;
+        match MIDILoopback::find_destination_id_by_name(&name) {
+            Some(id) => {
+                lua_pushinteger(L, id as i64);
+                Ok(true)
+            }
+            None => Ok(false),
+        }
+    }
+}
+
 // ---------- obj:get_unique_id() -> integer ----------
 
 #[allow(non_snake_case)]
@@ -247,7 +302,7 @@ unsafe extern "C" fn midi_loopback_gc(L: *mut lua_State) -> c_int {
 
 // ── Metatable registration ──────────────────────────────────────────
 
-const MIDI_LOOPBACK_OBJECT_META: [luaL_Reg; 5] = [
+const MIDI_LOOPBACK_OBJECT_META: [luaL_Reg; 6] = [
     luaL_Reg {
         name: b"__gc\0".as_ptr() as *const c_char,
         func: midi_loopback_gc as lua_CFunction,
@@ -265,21 +320,58 @@ const MIDI_LOOPBACK_OBJECT_META: [luaL_Reg; 5] = [
         func: get_unique_id as lua_CFunction,
     },
     luaL_Reg {
-        name: null(),
-        func: null(),
-    }, // sentinel
-];
-
-const MIDI_LOOPBACK_CLASS_META: [luaL_Reg; 2] = [
-    luaL_Reg {
-        name: b"new\0".as_ptr() as *const c_char,
-        func: new as lua_CFunction,
+        name: b"set_additional_destination\0".as_ptr() as *const c_char,
+        func: set_additional_destination as lua_CFunction,
     },
     luaL_Reg {
         name: null(),
         func: null(),
     }, // sentinel
 ];
+
+const MIDI_LOOPBACK_CLASS_META: [luaL_Reg; 3] = [
+    luaL_Reg {
+        name: b"new\0".as_ptr() as *const c_char,
+        func: new as lua_CFunction,
+    },
+    luaL_Reg {
+        name: b"find_destination_id_by_name\0".as_ptr() as *const c_char,
+        func: find_destination_id_by_name as lua_CFunction,
+    },
+    luaL_Reg {
+        name: null(),
+        func: null(),
+    }, // sentinel
+];
+
+#[cfg(test)]
+mod tests {
+    use crate::midi_loopback::MIDILoopback;
+
+    #[test]
+    fn print_destination_names() {
+        for d in coremidi::Destinations {
+            if let Some(name) = d.display_name() {
+                let bytes: Vec<u8> = name.bytes().collect();
+                println!("{:?} => bytes: {:?}", name, bytes);
+            }
+        }
+        let bytes: Vec<u8> = "H2MIDI-Pro (Port 2)".bytes().collect();
+        println!("ProPort2 => bytes: {:?}", bytes);
+
+    }
+
+    #[test]
+    fn set_additional_destination_with_same_name() {
+        let (mut loopback, _, _) = MIDILoopback::new("Instrument1", None, None).unwrap();
+        let id = MIDILoopback::find_destination_id_by_name("H2MIDI-Pro Port 2");
+        assert!(id.is_some());
+        assert!(
+            loopback.set_additional_destination(id).is_ok(),
+            "set_additional_destination should succeed with a valid destination ID"
+        );
+    }
+}
 
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]
