@@ -4,8 +4,10 @@ local loopbacks    = {}  -- [instrument_index] -> MIDILoopback
 local loopback_ids = {}  -- [instrument_index] -> {source_id, destination_id}
 local prev_names   = {}  -- [instrument_index] -> string
 
-local ADDITIONAL_DEVICE_NAME = "H2MIDI-Pro Port 2"
-local additional_device_id   = nil  -- resolved once at load time
+local ADDITIONAL_DEVICE_NAME   = "H2MIDI-Pro Port 2"
+local ADDITIONAL_DEVICE_NAME_2 = "Exquis"
+local additional_device_id     = nil  -- resolved once at load time
+local additional_device_id_2   = nil  -- resolved once at load time
 
 local function resolve_additional_device_id()
     additional_device_id = midi_loopback.find_destination_id_by_name(ADDITIONAL_DEVICE_NAME)
@@ -14,6 +16,13 @@ local function resolve_additional_device_id()
             ADDITIONAL_DEVICE_NAME, additional_device_id))
     else
         print(("Additional MIDI device '%s' not found"):format(ADDITIONAL_DEVICE_NAME))
+    end
+    additional_device_id_2 = midi_loopback.find_destination_id_by_name(ADDITIONAL_DEVICE_NAME_2)
+    if additional_device_id_2 then
+        print(("Additional MIDI device '%s' found with ID=%d"):format(
+            ADDITIONAL_DEVICE_NAME_2, additional_device_id_2))
+    else
+        print(("Additional MIDI device '%s' not found"):format(ADDITIONAL_DEVICE_NAME_2))
     end
 end
 
@@ -181,12 +190,7 @@ local function instrument_index_from_cursor()
 end
 
 local function focus_additional_device_on_current()
-    if not additional_device_id then
-        renoise.app():show_error(
-            ("Additional MIDI device '%s' is not available"):format(ADDITIONAL_DEVICE_NAME))
-        return
-    end
-
+    resolve_additional_device_id()
     local selected = instrument_index_from_cursor()
     if not selected then
         renoise.app():show_status("MIDI Loopback: no instrument in current cell")
@@ -196,9 +200,9 @@ local function focus_additional_device_on_current()
     for i, lb in pairs(loopbacks) do
         local _, err
         if i == selected then
-            _, err = lb:set_additional_destination(additional_device_id)
+            _, err = lb:set_additional_destination(additional_device_id, additional_device_id_2)
         else
-            _, err = lb:set_additional_destination(nil)
+            _, err = lb:set_additional_destination(nil, nil)
         end
         if err then
             local msg = ("set_additional_destination failed for instrument %d: %s"):format(i, err)
@@ -217,5 +221,3 @@ renoise.tool():add_keybinding{
     name = "Global:Tools:MIDI Loopback Creator - Focus Additional Device on Current Instrument",
     invoke = focus_additional_device_on_current,
 }
-
-resolve_additional_device_id()

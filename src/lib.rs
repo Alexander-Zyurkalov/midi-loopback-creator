@@ -225,8 +225,9 @@ unsafe extern "C" fn set_additional_destination(L: *mut lua_State) -> c_int {
 unsafe fn set_additional_destination_inner(L: *mut lua_State) -> Result<()> {
     unsafe {
         let loopback = get_loopback(L)?;
-        let id = get_optional_u32(L, 2)?;
-        loopback.set_additional_destination(id)?;
+        let id1 = get_optional_u32(L, 2)?;
+        let id2 = get_optional_u32(L, 3)?;
+        loopback.set_additional_destinations(id1, id2)?;
         Ok(())
     }
 }
@@ -364,11 +365,11 @@ mod tests {
     #[test]
     fn set_additional_destination_with_same_name() {
         let (mut loopback, _, _) = MIDILoopback::new("Instrument1", None, None).unwrap();
-        let id = MIDILoopback::find_destination_id_by_name("H2MIDI-Pro Port 2");
+        let id = MIDILoopback::find_destination_id_by_name("Exquis");
         assert!(id.is_some());
         assert!(
-            loopback.set_additional_destination(id).is_ok(),
-            "set_additional_destination should succeed with a valid destination ID"
+            loopback.set_additional_destinations(id, None).is_ok(),
+            "set_additional_destinations should succeed with a valid destination ID"
         );
     }
 }

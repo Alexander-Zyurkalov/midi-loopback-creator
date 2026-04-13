@@ -9,7 +9,7 @@ pub struct MIDILoopback {
     name: String,
     source_id: u32,
     destination_id: u32,
-    additional_dest_id: Option<u32>,
+    additional_dest_ids: (Option<u32>, Option<u32>),
 }
 
 fn describe_os_status(status: OSStatus) -> String {
@@ -71,7 +71,7 @@ impl MIDILoopback {
             name,
             source_id,
             destination_id,
-            None,
+            (None, None),
         )?);
         Ok((
             MIDILoopback {
@@ -80,7 +80,7 @@ impl MIDILoopback {
                 name: name.to_string(),
                 source_id,
                 destination_id,
-                additional_dest_id: None,
+                additional_dest_ids: (None, None),
             },
             source_id,
             destination_id,
@@ -94,21 +94,21 @@ impl MIDILoopback {
             name,
             self.source_id,
             self.destination_id,
-            self.additional_dest_id,
+            self.additional_dest_ids,
         )?);
         self.name = name.to_string();
         Ok(())
     }
 
-    pub fn set_additional_destination(&mut self, id: Option<u32>) -> Result<()> {
-        self.additional_dest_id = id;
+    pub fn set_additional_destinations(&mut self, id1: Option<u32>, id2: Option<u32>) -> Result<()> {
+        self.additional_dest_ids = (id1, id2);
         self.destination = None;
         self.destination = Some(Self::make_loopback(
             &self.client,
             &self.name.clone(),
             self.source_id,
             self.destination_id,
-            self.additional_dest_id,
+            self.additional_dest_ids,
         )?);
         Ok(())
     }
@@ -133,29 +133,29 @@ impl MIDILoopback {
         name: &str,
         source_id: u32,
         destination_id: u32,
-        additional_dest_id: Option<u32>,
+        additional_dest_ids: (Option<u32>, Option<u32>),
     ) -> Result<VirtualDestination> {
         let source = client.virtual_source(name).map_err(midi_err)?;
         source
             .set_property(&Properties::unique_id(), source_id as i32)
             .map_err(midi_err)?;
 
-        let additional: Option<(OutputPort, Destination)> = match additional_dest_id {
-            Some(id) => {
+        let mut additional: Vec<(OutputPort, Destination)> = Vec::new();
+        for id_opt in [additional_dest_ids.0, additional_dest_ids.1] {
+            if let Some(id) = id_opt {
                 let endpoint = coremidi::Destinations
                     .into_iter()
                     .find(|d| d.unique_id() == Some(id))
                     .ok_or_else(|| anyhow!("Additional destination with ID {} not found", id))?;
                 let port = client.output_port(name).map_err(midi_err)?;
-                Some((port, endpoint))
+                additional.push((port, endpoint));
             }
-            None => None,
-        };
+        }
 
         let destination = client
             .virtual_destination_with_protocol(name, Protocol::Midi10, move |packet_list| {
                 let _ = source.received(packet_list);
-                if let Some((port, endpoint)) = &additional {
+                for (port, endpoint) in &additional {
                     let _ = port.send(endpoint, packet_list);
                 }
             })
